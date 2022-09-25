@@ -39,7 +39,8 @@ mxjTW_pxl = 2*floor((nSigMult*sigPsfPixel_pxl)/2)+1;
 mTW = mxjTW_pxl * mxiTW_pxl;
 
 % Get Number of counts for each object
-S = SNR * sqrt(mTW) * sig_pxl; % <--- tracking window mTW
+S = SNR .* sqrt(mTW) .* sig_pxl; % <--- tracking window mTW
+
 
 % Poisson ratio, given by professor
 lambda_poisson = sig_pxl^2;
@@ -65,7 +66,7 @@ RGB = IM_noBNoise;
 osi_pxl = zeros(nObjs,2);
 
 % Loop through objects and super position objects
-for iObj = 1 : 5 % should be "nObjs" but currently debugging
+for iObj = 1 : nObjs 
    
    
    % Object origin randomized
@@ -132,6 +133,7 @@ nmult = 6;
 [ixb, iyb] =find( IM_BNoise_Objs <= (nmult * sig_pxl)  );
 I_m(ixb,iyb) = IM_BNoise_Objs(ixb,iyb);
 Bhat = median(I_m,"all","omitnan"); % This is the same as lambda
+% Bhat = median(IM_true,"all","omitnan"); % This is the same as lambda
 
 % Estimate backgound
 % IB_hat = imboxfilt(IM_true,11);
@@ -141,7 +143,7 @@ kern_func = @(A) median(A,"all");
 % kern_func = @(A) norm(A,"inf");
 
 % Here we would start to iterate over the size of the window? 
-nSigMult = 60;
+nSigMult = 60; %10; % 60
 % for nSigMult = 1 : 2 : 10 % This searching which multiplier for the
 % tracking window would be good, dont forget the end
 
@@ -156,7 +158,7 @@ mTW = mxjTW_pxl * mxiTW_pxl;
 % IB_hat = mat2gray(IM_BNoise_Objs - kern_func(IM_BNoise_Objs));% - 100);
 % IB_hat = IM_BNoise_Objs - Bhat;
 IB_hat = IM_BNoise_Objs - Bhat;
-IB_hat =  IB_hat + min(IB_hat,[],'all')
+IB_hat =  IB_hat + min(IB_hat,[],'all');
 idxBhatLtZ = find(IB_hat<0);
 IB_hat(idxBhatLtZ) = zeros(size(idxBhatLtZ));
 
@@ -185,8 +187,10 @@ medPxlS = median(IB_hat(1:mxiTW_pxl,1:mxjTW_pxl),"all");
 % idxIBm = im2bw(mat2gray(IB_hat),1);
 % idxIBm = im2bw(IB_hat,avgPxlS);
 % idxIBm = find(IB_hat>=(stdPxlS));
-% idxIBm = find(IB_hat>=(avgPxlS));
-idxIBm = find(IB_hat>=(medPxlS));
+idxIBm = find(IB_hat>=(avgPxlS));
+% idxIBm = find(IB_hat>=(medPxlS));
+% idxIBm = find(IB_hat>0);
+% idxIBm = find(IB_hat>= 4*sig_pxl)'
 
 
 % IB_hat = IM_true;
@@ -267,7 +271,7 @@ hold on;
 
 plot(CentroidsHat(:,2),CentroidsHat(:,1),'+g','MarkerSize',12,'LineWidth',2,'DisplayName','Est. Centroid');
 plot(osi_pxl(:,2),osi_pxl(:,1),'+m','MarkerSize',12,'LineWidth',2,'DisplayName','True Centroid');
-
-
-
-
+axis equal
+xlim([0 500])
+ylim([0 500])
+grid minor;
