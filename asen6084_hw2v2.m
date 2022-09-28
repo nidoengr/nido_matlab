@@ -28,7 +28,6 @@ IFOV_rd = 2*atan(p_m/(2*f_m));
 
 % Pixel space theta
 sigPsfPixel_pxl = sixSigTheta_rd / (6*IFOV_rd);
-
 % Tracking window params
 nSigMult = 10; %<---------ADHOC, prof recommended 6 (good), 10 seems good 12, 15?
                % Note: this will change the repeatable "random" locations
@@ -194,7 +193,7 @@ medPxlS = median(IB_hat,"all");
 % idxIBm = find(IB_hat>=(medPxlS));
 % idxIBm = find(IB_hat>0);
 % idxIBm = find(IB_hat>= 4*sig_readnoise)'
-nStdDevT = 4; % Levesque, Sec. 2
+nStdDevT = 2; % Levesque, Sec. 2 says multiplier = 2
 idxIBm = find( IB_hat >= nStdDevT*stdPxlS ); % E in Levesque
 % idxIBm = find(IB_hat>= medPxlS); % 
 DetMat = zeros(size(IB_hat));
@@ -204,10 +203,11 @@ SIMat(idxIBm) = zeros(size(DetMat(idxIBm)));
 % IB_hat(idxIBm) = ones(size(IB_hat(idxIBm)));
 % IB_hat(~idxIBm) = zeros(size(IB_hat(~idxIBm)));
 IB_hat = DetMat .* IB_hat;
-% figure("Name","Image Threshold Image"); 
-% imshow(mat2gray(IB_hat))
-% h = gca;
-% h.Visible = 'on';
+figure("Name","Image Threshold Image"); 
+% imshow(mat2gray(DetMat))
+imshow(mat2gray(SIMat))
+h = gca;
+h.Visible = 'on';
 
 % sig_n = floor(std(double(IB_hat),0,"all"));
 % idxThresh = IB_hat >= (sig_n/3);
@@ -250,7 +250,7 @@ disp('Detection coordinates (first few):')
 disp(det_coord_pxl(1:5,:))
 
 % [IdxClust, C] = dbscan(det_coord_pxl,6*sigPsfPixel_pxl,80);
-[IdxClust, C] = dbscan(det_coord_pxl,3*sigPsfPixel_pxl,3);
+[IdxClust, C] = dbscan(det_coord_pxl,3*sigPsfPixel_pxl,50);
 CentroidsHat = calc_centroids_from_clusters(ydetc_pxl,xdetc_pxl,IdxClust,DetMat);
 
 idxTrueMatchClust = [ 3 4 5 1 2 ];
@@ -290,4 +290,89 @@ xlim([0 500])
 ylim([0 500])
 grid minor;
 
+%% Match Filter
 
+% Pixel space theta
+% sigPsfPixel_pxl
+
+% Tracking window params
+nSigMult = 3; %<---------ADHOC, prof recommended 6 (good), 10 seems good 12, 15?
+               % Note: this will change the repeatable "random" locations
+               % because we feed the random number generation different
+               % counts
+% mxiTW_pxl = 2*floor((nSigMult*sigPsfPixel_pxl)/2)+1;
+% mxjTW_pxl = 2*floor((nSigMult*sigPsfPixel_pxl)/2)+1;
+% this is kind of what anthony did
+mxiTW_pxl = floor((nSigMult*sigPsfPixel_pxl))+1;
+mxjTW_pxl = floor((nSigMult*sigPsfPixel_pxl))+1;
+mTW = mxjTW_pxl * mxiTW_pxl;
+xrng = 1:mxiTW_pxl;
+yrng = 1:mxjTW_pxl;
+midpnt = median(xrng);
+centMTWrng = xrng - midpnt; % square window
+
+% Convolution function
+g = exp(-((centMTWrng/2).^2+(centMTWrng'/2).^2)./(2*sigPsfPixel_pxl^2)); 
+% This seems to be the integrand of one of the first few equations in Lecture 8...
+
+
+% MF Score
+% convTic = tic;
+MFscore = conv2(Ib, g, 'same');
+% convToc = toc(convTic);
+% fprintf('Elapsed time for convolution (s): %f\n',convToc)
+% 
+% 
+% % MF Variance
+sigmaMF = sqrt(var(MFscore(:)));
+% 
+% % MF Threshold
+nSigMFMult = 1/2;
+T_MF = sigmaMF * nSigMFMult;
+% 
+% % MF Detections
+idxDetMF= MFscore >= T_MF;
+DetMFMat = zeros(size(IB_hat));
+DetMFMat(idxDetMF) = ones(size(IB_hat(idxDetMF)));
+
+figure("Name","Match Filter Detections Image")
+imshow(mat2gray(DetMFMat))
+
+
+
+[xMFdetc_pxl,yMFdetc_pxl] = find(DetMFMat); %<--- Works
+
+
+detMF_coord_pxl = [xMFdetc_pxl,yMFdetc_pxl];
+disp('Detection coordinates (first few):')
+disp(detMF_coord_pxl (1:5,:))
+
+ticDbscan = tic;
+[IdxClustMF, C] = dbscan(detMF_coord_pxl ,6*sigPsfPixel_pxl,30);
+tocDbscan = toc(ticDbscan);
+fprintf('Elapsed time for dbscan (s): %f\n',tocDbscan);
+CentroidsMFHat = calc_centroids_from_clusters(yMFdetc_pxl,xMFdetc_pxl,IdxClustMF,DetMFMat);
+% 
+%% MF Clustering Results Figure
+figure("Name","MF Clustering Results")
+hold on;
+detfig = gscatter(yMFdetc_pxl,xMFdetc_pxl,IdxClustMF);
+detfig(1).Color='k';
+% % detfig(2).Color=[0 1 0];
+% % detfig(3).Color=[0;139;69]./norm([0;139;69]);%[178;58;238]./norm([178;58;238]);
+% % detfig(4).Color=[154;205;50]./norm([154;205;50]);%
+% % detfig(5).Color=[102;205;0]./norm([102;205;0]);%
+% 
+detfig_ax = gca;
+detfig_ax.YDir ="reverse";
+legend('Outlier','1st obj','2nd obj','3rd obj','4th obj','5th obj',Location='northeast')
+xlabel(''); ylabel('')
+
+hold on;
+
+plot(CentroidsMFHat(:,2),CentroidsMFHat(:,1),'+g','MarkerSize',12,'LineWidth',2,'DisplayName','Est. Centroid');
+plot(osi_pxl(:,2),osi_pxl(:,1),'+m','MarkerSize',12,'LineWidth',2,'DisplayName','True Centroid');
+axis equal
+xlim([0 500])
+ylim([0 500])
+grid minor;
