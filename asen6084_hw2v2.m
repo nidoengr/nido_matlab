@@ -14,7 +14,7 @@ m = mxi_pxl * mxj_pxl;
 % focal distance, aperture diameter, pixel variance, pixel pitch, wavelength 
 f_m = 4;
 D_m = 0.5;
-sig_pxl = 10;
+sig_readnoise = 10;
 p_m = 1.5E-6;
 lam_m = 500E-9;
 
@@ -39,11 +39,11 @@ mxjTW_pxl = 2*floor((nSigMult*sigPsfPixel_pxl)/2)+1;
 mTW = mxjTW_pxl * mxiTW_pxl;
 
 % Get Number of counts for each object
-S = SNR .* sqrt(mTW) .* sig_pxl; % <--- tracking window mTW
+S = SNR .* sqrt(mTW) .* sig_readnoise; % <--- tracking window mTW
 
 
 % Poisson ratio, given by professor
-lambda_poisson = sig_pxl^2;
+lambda_poisson = sig_readnoise^2;
 
 % Create an image with no noise
 IM_noBNoise = zeros(mxj_pxl,mxi_pxl);
@@ -51,10 +51,11 @@ IM_noBNoise = zeros(mxj_pxl,mxi_pxl);
 % Creat an image background with poisson distribution
 %  I_{b}
 IM_BNoise   = poissrnd(lambda_poisson,mxi_pxl,mxj_pxl);
+figure("Name","Image with Background Only");
 imshow(mat2gray(IM_BNoise));
 
 % Image with objs and noise initialization
-IM_BNoise_Objs = IM_BNoise; % start here
+IM_BNoise_Objs = IM_noBNoise;% ---> Do this later: IM_BNoise_Objs = IM_BNoise_Objs + IM_BNoise; % start here
 
 % Setup data retention for each object's own image
 IM_Obj_i = repmat(IM_noBNoise,1,1,nObjs);
@@ -65,10 +66,12 @@ RGB = IM_noBNoise;
 % The random center coordinates [ x_c,  y_c ]
 osi_pxl = zeros(nObjs,2);
 
+figure("Name","Image with Objects no Background noise");
+
 % Loop through objects and super position objects
 for iObj = 1 : nObjs 
-   
-   
+%    disp('Setup snagit')
+%    keyboard;
    % Object origin randomized
    osi_pxl(iObj,:) = [randi(mxi_pxl),randi(mxj_pxl)]; 
 
@@ -98,22 +101,29 @@ for iObj = 1 : nObjs
    IM_BNoise_Objs = IM_Obj_i(:,:,iObj) + IM_BNoise_Objs;
 
    % Plot
-   %imshow(mat2gray(IM_BNoise_Objs));
-   %hold;
-   %pause(2.5)
+   imshow(mat2gray(IM_BNoise_Objs));
+   % It is expected that after each iteration, the image in 
+   % the figure drowns out the previous iteration's object
+   % because mat2gray normalizes the matrix.
+   hold;
+%    pause(2.5)
 end
 % hold off;
 
 % Show the syntheic image
+figure("Name","Image with Objects with Background Noise Added");
+IM_BNoise_Objs = IM_BNoise_Objs + IM_BNoise;
 imshow(mat2gray(IM_BNoise_Objs));
 h = gca;
 h.Visible = 'on';
 
-IM_true = mat2gray(IM_BNoise_Objs);
-figure("Name","True Synthetic Image");
+% IM_true = mat2gray(IM_BNoise_Objs); % Older going to use it differently
+% here
+IM_true = IM_BNoise_Objs;
+figure("Name","True Synthetic Image with Markers");
 
 OsXY = [osi_pxl(:,2),osi_pxl(:,1)]; % Its a bit funky here but this lines up
-RGB = insertMarker(IM_true,OsXY,"plus","Size",12,"Color","magenta");
+RGB = insertMarker(mat2gray(IM_true),OsXY,"plus","Size",12,"Color","magenta");
 % hax =  axes('BoxStyle','full');
 % ax1 = axes('Position',[0.1 0.1 .6 .6],'Box','on');
 % ax2 = axes('Position',[.35 .35 .6 .6],'Box','on');
@@ -127,78 +137,77 @@ h.Visible = 'on';
 
 %% 2. Thresholding & Clustering
 
-% Build Image mask
-I_m = nan(size(IM_BNoise_Objs));
-nmult = 6;
-[ixb, iyb] =find( IM_BNoise_Objs <= (nmult * sig_pxl)  );
-I_m(ixb,iyb) = IM_BNoise_Objs(ixb,iyb);
-Bhat = median(I_m,"all","omitnan"); % This is the same as lambda
+% % Build Image mask
+% % This next block of code is an example of what we would use
+% % to estimate the read noise if we did not know it.
+% % However, that is not needed here since we know the read
+% % noise.
+% I_m = nan(size(IM_BNoise_Objs));
+% nmult = 6;
+% [ixb, iyb] =find( IM_BNoise_Objs <= (nmult * sig_readnoise)  );
+% I_m(ixb,iyb) = IM_BNoise_Objs(ixb,iyb);
+% Bhat = median(I_m,"all","omitnan"); % This is the same as lambda
 % Bhat = median(IM_true,"all","omitnan"); % This is the same as lambda
 
-% Estimate backgound
-% IB_hat = imboxfilt(IM_true,11);
-kern_func = @(A) median(A,"all");
-% kern_func = @(A) norm(A,1);
-% kern_func = @(A) norm(A,2);
-% kern_func = @(A) norm(A,"inf");
+Bhat = sig_readnoise^2;
 
-% Here we would start to iterate over the size of the window? 
-nSigMult = 60; %10; % 60
-% for nSigMult = 1 : 2 : 10 % This searching which multiplier for the
-% tracking window would be good, dont forget the end
+Ib = IM_true - Bhat;
+figure("Name","Background subtracted Image I - sigma_readnoise");
+imshow(mat2gray(Ib));
 
-mxiTW_pxl = 2*floor((nSigMult*sigPsfPixel_pxl)/2)+1;
-mxjTW_pxl = 2*floor((nSigMult*sigPsfPixel_pxl)/2)+1;
-mTW = mxjTW_pxl * mxiTW_pxl;
 
-% Subtract the background
-
-% Calculate local mean
-% IB_hat = nlfilter(IM_true,[mxiTW_pxl mxjTW_pxl],kern_func);
-% IB_hat = mat2gray(IM_BNoise_Objs - kern_func(IM_BNoise_Objs));% - 100);
 % IB_hat = IM_BNoise_Objs - Bhat;
-IB_hat = IM_BNoise_Objs - Bhat;
-IB_hat =  IB_hat + min(IB_hat,[],'all');
-idxBhatLtZ = find(IB_hat<0);
-IB_hat(idxBhatLtZ) = zeros(size(idxBhatLtZ));
+% IB_hat =  IB_hat + min(IB_hat,[],'all');
+% idxBhatLtZ = find(IB_hat<0);
+% IB_hat(idxBhatLtZ) = zeros(size(idxBhatLtZ));
+
+IB_hat = Ib;
 
 figure("Name","Background Subtracted Image"); imshow(mat2gray(IB_hat))
 h = gca;
 h.Visible = 'on';
 % Plots
 figure("Name","True Image next to Background Subtracted Image")
-imshowpair(mat2gray(RGB),IB_hat,'montage')
+imshowpair(mat2gray(RGB),mat2gray(IB_hat),'montage')
 h = gca;
 h.Visible = 'on';
 
-% IB_hat = mat2gray(IB_hat);
-stdPxlS = floor(std(IB_hat(1:mxiTW_pxl,1:mxjTW_pxl),[],"all"));
-% stdPxlS = floor(std(IB_hat,[],"all"));
-% avgPxlS = mean(IB_hat,"all");
-avgPxlS = mean(IB_hat(1:mxiTW_pxl,1:mxjTW_pxl),"all");
-% medPxlS = median(IB_hat,"all");
-medPxlS = median(IB_hat(1:mxiTW_pxl,1:mxjTW_pxl),"all");
-% IBm = im2bw(IB_hat,1-4.89*stdPxlS);
-% idxIBm = im2bw(IB_hat,avgPxlS+4.59*stdPxlS);
 
 %--------------
 % Thresholding here
 %--------------
+% stdPxlS = floor(std(IB_hat,[],"all"));
+stdPxlS = floor(sqrt(var(IB_hat(:))));
+avgPxlS = mean(IB_hat,"all");
+medPxlS = median(IB_hat,"all");
+% Alternately, we can try doing the std avg and med of some
+% dark window.
+% % medPxlS = median(IB_hat(1:mxiTW_pxl,1:mxjTW_pxl),"all");
+% Dont know if the code below will work
+% IBm = im2bw(IB_hat,1-4.89*stdPxlS);
+% idxIBm = im2bw(IB_hat,avgPxlS+4.59*stdPxlS);
+
 % idxIBm = im2bw(mat2gray(IB_hat),1);
 % idxIBm = im2bw(IB_hat,avgPxlS);
 % idxIBm = find(IB_hat>=(stdPxlS));
-idxIBm = find(IB_hat>=(avgPxlS));
+% idxIBm = find(IB_hat>=(avgPxlS));
 % idxIBm = find(IB_hat>=(medPxlS));
 % idxIBm = find(IB_hat>0);
-% idxIBm = find(IB_hat>= 4*sig_pxl)'
-
-
-% IB_hat = IM_true;
-IB_hat(idxIBm) = ones(size(IB_hat(idxIBm)));
-IB_hat(~idxIBm) = zeros(size(IB_hat(~idxIBm)));
-figure("Name","Image Threshold Image"); imshow(IB_hat)
-h = gca;
-h.Visible = 'on';
+% idxIBm = find(IB_hat>= 4*sig_readnoise)'
+nStdDevT = 4; % Levesque, Sec. 2
+idxIBm = find( IB_hat >= nStdDevT*stdPxlS ); % E in Levesque
+% idxIBm = find(IB_hat>= medPxlS); % 
+DetMat = zeros(size(IB_hat));
+SIMat  = ones(size(IB_hat));
+DetMat(idxIBm) = ones(size(DetMat(idxIBm)));
+SIMat(idxIBm) = zeros(size(DetMat(idxIBm)));
+% IB_hat(idxIBm) = ones(size(IB_hat(idxIBm)));
+% IB_hat(~idxIBm) = zeros(size(IB_hat(~idxIBm)));
+IB_hat = DetMat .* IB_hat;
+% figure("Name","Image Threshold Image"); 
+% imshow(mat2gray(IB_hat))
+% h = gca;
+% h.Visible = 'on';
 
 % sig_n = floor(std(double(IB_hat),0,"all"));
 % idxThresh = IB_hat >= (sig_n/3);
@@ -206,7 +215,7 @@ h.Visible = 'on';
 
 % Plots
 figure("Name","True Image next to Threshold Image")
-imshowpair(mat2gray(RGB),IB_hat,'montage')
+imshowpair(mat2gray(RGB),mat2gray(IB_hat),'montage')
 h = gca;
 h.Visible = 'on';
 xticks(0:100:1000);
@@ -231,17 +240,24 @@ title('Truth Image vs Threshold')
 %--------------
 % IB_hat_flat = IB_hat(:);%IB_hat(:);
 
-[xdetc_pxl,ydetc_pxl] = find(IB_hat);
+[xdetc_pxl,ydetc_pxl] = find(DetMat); %<--- Works
+% [xdetc_pxl,ydetc_pxl] = find(IB_hat); %<--- Works
+% [xdetc_pxl,ydetc_pxl] = find(idxIBm); %<--- Doesnt work
+
 
 det_coord_pxl = [xdetc_pxl,ydetc_pxl];
 disp('Detection coordinates (first few):')
 disp(det_coord_pxl(1:5,:))
 
 % [IdxClust, C] = dbscan(det_coord_pxl,6*sigPsfPixel_pxl,80);
-[IdxClust, C] = dbscan(det_coord_pxl,6*sigPsfPixel_pxl,3);
-CentroidsHat = calc_centroids_from_clusters(ydetc_pxl,xdetc_pxl,IdxClust,IB_hat);
-idxTrueMatchClust = [3 4 2 5];
-idxTrueMatchClust = [ 4 3 5 2];
+[IdxClust, C] = dbscan(det_coord_pxl,3*sigPsfPixel_pxl,3);
+CentroidsHat = calc_centroids_from_clusters(ydetc_pxl,xdetc_pxl,IdxClust,DetMat);
+
+idxTrueMatchClust = [ 3 4 5 1 2 ];
+fprintf('Object %d & n/a & n/a & %7.3f & %7.3f & n/a \n',...
+      idxTrueMatchClust(4),osi_pxl(idxTrueMatchClust(4),:))
+fprintf('Object %d & n/a & n/a & %7.3f & %7.3f & n/a \n',...
+      idxTrueMatchClust(5),osi_pxl(idxTrueMatchClust(5),:))
 for icent = 1 : numel(CentroidsHat(:,1))
    idxT = idxTrueMatchClust(icent);
    thisAbsErrMag = sqrt(sum((osi_pxl(idxT,:) - CentroidsHat(icent,:)).^2));
@@ -249,9 +265,7 @@ for icent = 1 : numel(CentroidsHat(:,1))
       idxT,CentroidsHat(icent,:),osi_pxl(idxT,:),thisAbsErrMag)
 %    fprintf('Object %d & %7.3f & %7.3f \\\\ \n',icent,CentroidsHat(icent,:));
 end
-fprintf('Object %d & n/a & n/a & %7.3f & %7.3f & n/a \n',...
-      1,osi_pxl(idxT,:))
-%%
+%% Clustering Results Figure
 figure("Name","Clustering Results")
 % scatter(xdetc_pxl,ydetc_pxl,'.k','DisplayName','All Detections');
 hold on;
@@ -275,3 +289,5 @@ axis equal
 xlim([0 500])
 ylim([0 500])
 grid minor;
+
+
