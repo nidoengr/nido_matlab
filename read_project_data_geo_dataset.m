@@ -43,7 +43,7 @@ READDATA = repmat(struct('FITSREADDATA',nan,...
                          'FITSINFO',nan),nFits,1);
 for i=1:nFits
    READDATA(i).FITSREADDATA = fitsread(fitsFullPathsCell{i,:});
-%    READDATA(i).FITSINFO = fitsinfo(fitsFullPathsCell{i,:});
+   READDATA(i).FITSINFO = fitsinfo(fitsFullPathsCell{i,:});
 end
 fprintf('Dataset read time: %f\n',toc)
 % READDATA(1).FITSREADDATA

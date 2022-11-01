@@ -6,7 +6,7 @@ ticSim = tic();
 IMDATA = read_project_data_geo_dataset();
 
 %% Remove Backgrounds
-sig_readnoise = 10;
+sig_readnoise = 10;%sqrt(mean(IMDATA(1).FITSREADDATA,'all'));%
 IMDATA = project_data_background_removal(IMDATA, sig_readnoise);
 
 

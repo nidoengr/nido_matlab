@@ -9,8 +9,8 @@ nIMs = numel(IMDATA);
 
 % From the website brochure of the optical system used in
 % project
-f_m = 4; %0.600;%
-D_m = 0.5; %0.200;%
+f_m =  4; % 0.600;%
+D_m = 0.5; % 0.200;%
 % sig_readnoise = 10;
 p_m = 1.5E-6;
 lam_m = 500E-9;
