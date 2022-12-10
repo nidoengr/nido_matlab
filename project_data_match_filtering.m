@@ -1,6 +1,8 @@
-function IMDATA = project_data_match_filtering(IMDATA,nPntsReqInClust,plotFlag)
+function IMDATA = project_data_match_filtering(IMDATA,nPntsReqInClust,plotFlag,sig_readnoise)
 if nargin<2
-nPntsReqInClust = 500;
+nPntsReqInClust = 100;
+plotFlag = false;
+sig_readnoise = 10;
 end
 nIMs = numel(IMDATA);
 
@@ -11,9 +13,20 @@ nIMs = numel(IMDATA);
 % project
 f_m =  4; % 0.600;%
 D_m = 0.5; % 0.200;%
-% sig_readnoise = 10;
 p_m = 1.5E-6;
 lam_m = 500E-9;
+% sig_readnoise = 10;
+% These are new optic params
+% f_m = 0.0600;%
+% D_m = 0.200;%
+% p_m = 18E-6;
+% pwidth_m = 18E-6; % pixel width from fits
+% pheight_m = 18E-6; % pixel height from fits
+% nPxlWidth  = 2048; % number of pixels from fits
+% nPxlHeight = 2048; % number of pixels from fits
+% % pixel pitch 
+% p_m = sqrt(sum([pwidth_m,pheight_m].^2))/sqrt(sum([nPxlWidth,nPxlHeight].^2));
+
 
 % $\sigma_{\theta} - assume 6 sigma theta here assumed here
 sixSigTheta_rd = asin(1.22*lam_m*f_m/D_m);
@@ -28,7 +41,7 @@ sigPsfPixel_pxl = sixSigTheta_rd / (6*IFOV_rd);
 
 % Tracking window params
 % warning('FIX ME! Hardcoded tracking window multiplier for convolution.')
-nSigMult = 10; %<---------ADHOC, prof recommended 6 (good), 10 seems good 12, 15?
+nSigMult =  3; %<---------ADHOC, prof recommended 6 (good), 10 seems good 
                % Note: this will change the repeatable "random" locations
                % because we feed the random number generation different
                % counts
@@ -63,7 +76,7 @@ for iIM = 1:nIMs
    IMDATA(iIM).MFscore = sigmaMF;
    %
    % % MF Threshold
-   nSigMFMult = 8;
+   nSigMFMult = 10; % Was 8
    T_MF = sigmaMF * nSigMFMult;
    %
    % % MF Detections
@@ -89,19 +102,20 @@ for iIM = 1:nIMs
 
    ticDbscan = tic;
    try
-      [IdxClustMF, C] = dbscan(detMF_coord_pxl ,6*sigPsfPixel_pxl,nPntsReqInClust);
+      [IdxClustMF, ~] = dbscan(detMF_coord_pxl ,nSigMult*sigPsfPixel_pxl,nPntsReqInClust);
       tocDbscan = toc(ticDbscan);
 %       fprintf('Elapsed time for dbscan (s): %f\n',tocDbscan);
-      CentroidsMFHat = calc_centroids_from_clusters(yMFdetc_pxl,xMFdetc_pxl,IdxClustMF,DetMFMat);
-%       PhotoMetCetHat = cal_photomet_cent_from_image_and_clust(IMDATA(iIM).Ib,DetMFMat,CentroidsMFHat,...
-%          6*sigPsfPixel_pxl); % <-----MAKE INTO A FUNCTION
-%          TO CALCULATE THE PHOTOMETRIC CENTROID!
+%       CentroidsMFHat = calc_centroids_from_clusters(yMFdetc_pxl,xMFdetc_pxl,IdxClustMF,DetMFMat);
+      [CentroidsMFHat, CentroidsUncMFHat] = calc_centroids_from_clusters(yMFdetc_pxl,xMFdetc_pxl,IdxClustMF,IMDATA(iIM).Ib);
+      
       IMDATA(iIM).IdxClustMF  = IdxClustMF;
       IMDATA(iIM).CentroidsMFHat = CentroidsMFHat;
+      IMDATA(iIM).CentroidsUncMFHat = CentroidsUncMFHat;
    catch
       warning(['Image ',num2str(iIM,'%d'),' dbscan not successful']);
       IMDATA(iIM).IdxClustMF  = nan;
-      IMDATA(iIM).CentroidsMFHat = nan;
+      IMDATA(iIM).CentroidsMFHat = nan(1,2);
+      IMDATA(iIM).CentroidsUncMFHat = nan(1,2);
    end
    %
    %% MF Clustering Results Figure
@@ -131,8 +145,8 @@ for iIM = 1:nIMs
       % ylim([0 500])
       grid minor;
       drawnow;
-      pause(1)
-      saveas(tempFig,['C:\Users\joses\OneDrive\Pictures\test_run_asen_6084_proj\im_mf_proc_',num2str(iIM,'%2d')],'png');
+%       pause(1)
+%       saveas(tempFig,['C:\Users\joses\OneDrive\Pictures\test_run_asen_6084_proj\im_mf_proc_',num2str(iIM,'%2d')],'png');
    end
    end
 end
