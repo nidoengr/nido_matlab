@@ -1,10 +1,10 @@
 % asen6084_hw3
 close all; clc; clear all;
 rng(20220929);
-
+fontSizeVal = 14;
 %% Inputs
 % 5 objects with photometric SNR
-SNR = [ 30 300 ]';
+SNR = [ 300 30 ]';
 nObjs = numel(SNR);
 % Pixel dimensions
 mxi_pxl = 500;
@@ -19,7 +19,7 @@ sig_readnoise = 10;
 p_m = 1.5E-6;
 lam_m = 500E-9;
 
-%% 1. Create Image
+%% 1. Create Sequence of Images
 
 % $\sigma_{\theta} - assume 6 sigma theta here assumed here
 sixSigTheta_rd = asin(1.22*lam_m*f_m/D_m);
@@ -54,6 +54,7 @@ IM_noBNoise = zeros(mxj_pxl,mxi_pxl);
 IM_BNoise   = poissrnd(lambda_poisson,mxi_pxl,mxj_pxl);
 figure("Name","Image with Background Only");
 imshow(mat2gray(IM_BNoise));
+set(gca,'FontSize',fontSizeVal) % Creates an axes and sets its FontSize 
 
 % Image with objs and noise initialization
 IM_BNoise_Objs = IM_noBNoise;% ---> Do this later: IM_BNoise_Objs = IM_BNoise_Objs + IM_BNoise; % start here
@@ -67,68 +68,60 @@ RGB = IM_noBNoise;
 % The random center coordinates [ x_c,  y_c ]
 osi_pxl = zeros(nObjs,2);
 
-nFrames = 5;
+nFrames = 50;
 
-xStreak = linspace(250,250,nFrames);
-yStreak = linspace(2,482,nFrames);
+xStreak = linspace(2,482,nFrames);%linspace(250,250,nFrames);
+% yStreak = 4/5.*xStreak;%linspace(2,482,nFrames);
+yStreak = 1/3.*xStreak+1;%linspace(2,482,nFrames);
 
 osi_pxl= [xStreak',yStreak'];
 
+ImSeq = repmat(struct('IDATA',zeros([mxi_pxl, mxj_pxl, nFrames ]),...
+                      'IDATAwithMarkers',zeros([mxi_pxl, mxj_pxl, nFrames ]),...
+                      'BDATA',zeros([mxi_pxl, mxj_pxl, nFrames ])...
+                      ),nObjs,1);
+
 % Loop through objects and super position objects
-% for iObj = 1 : nObjs 
-iObj = 1
+for iObj = 1 : nObjs 
+% iObj = 1; % <-- This was for debugging
+showNFrames = [10 20 30 40 50 ];
+iShow = 1;
 for iFrame = 1 : nFrames
    
    
-   % Object origin randomized
-%    osi_pxl(iObj,:) = [randi(mxi_pxl),randi(mxj_pxl)];
+   [tempIM_true, tempRGB, IM_BNoise] = generate_image(SNR(iObj), mxi_pxl, mxj_pxl, f_m, D_m, sig_readnoise, p_m,...
+   lam_m, osi_pxl(iFrame,:));
+   ImSeq(iObj).IDATA(:,:,iFrame) = tempIM_true;
+%    ImSeq(iObj).IDATAwithMarkers(:,:,iFrame) = tempRGB;
+   ImSeq(iObj).BDATA(:,:,iFrame) = IM_BNoise;
+   IM_BNoise_Objs = tempIM_true;
 
-   % This object's count
-   nCounts = S(iObj);
-
-   % Create the object origin based on the counts i.e. counts= rows
-%    Osi_pxl = repmat(osi_pxl(iObj,:),nCounts,1);
-   Osi_pxl = repmat(osi_pxl(iFrame,:),nCounts,1);
-   
-   % Initialize the the objects XY coordinates based on the counts (rows)
-   % % REF: a + (b-a)*sig, normal dist between a and b
-   XYs1_bar = round(repmat(-sigPsfPixel_pxl,nCounts,2) + ...
-      (sigPsfPixel_pxl*2) .* randn(nCounts,2) + Osi_pxl);
-
-   % Loop through the counts and increment 
-   for iCount = 1 : nCounts
-      % Check if the XYcoord is bound by 500x500 image and positive
-      if all([XYs1_bar(iCount,1),XYs1_bar(iCount,2)]>0) && ...
-            XYs1_bar(iCount,1)<=mxi_pxl && XYs1_bar(iCount,2)<=mxj_pxl
-         % Increment the value of the xy indecies (intensity)
-         IM_Obj_i(XYs1_bar(iCount,1),XYs1_bar(iCount,2),iObj) = ...
-            IM_Obj_i(XYs1_bar(iCount,1),XYs1_bar(iCount,2),iObj) + 1;
-      end
-   end
-
-   % Super position images together
-   IM_BNoise_Objs = IM_Obj_i(:,:,iObj) + IM_BNoise_Objs;
    % Plot
-   figure();
-   imshow(mat2gray(IM_BNoise_Objs));
+   if iFrame == showNFrames(iShow)
+%    figure("Name",['Image number = ',num2str(iFrame,'%d')]);
+% %    imshow(mat2gray(IM_BNoise_Objs));
+%    imshowpair(mat2gray(tempIM_true),mat2gray(tempRGB),'montage');
+   % h = gca;
+   % h.Visible = 'on';
    % It is expected that after each iteration, the image in 
    % the figure drowns out the previous iteration's object
    % because mat2gray normalizes the matrix.
-   hold;
+%    hold;
+   iShow= iShow + 1;
+   end
 %    pause(2.5)
 end
-% hold off;
 
 % Show the syntheic image
-figure("Name","Image with Objects with Background Noise Added");
-IM_BNoise_Objs = IM_BNoise_Objs + IM_BNoise;
-imshow(mat2gray(IM_BNoise_Objs));
-h = gca;
-h.Visible = 'on';
+% figure("Name","Image with Objects with Background Noise Added");
+% IM_BNoise_Objs = IM_BNoise_Objs + IM_BNoise;
+% imshow(mat2gray(IM_BNoise_Objs));
+% h = gca;
+% h.Visible = 'on';
 
 % IM_true = mat2gray(IM_BNoise_Objs); % Older going to use it differently
 % here
-IM_true = IM_BNoise_Objs;
+IM_true = ImSeq(1).IDATA(:,:,end);%IM_BNoise_Objs;
 figure("Name","True Synthetic Image with Markers");
 
 OsXY = [osi_pxl(:,2),osi_pxl(:,1)]; % Its a bit funky here but this lines up
@@ -143,33 +136,17 @@ h.Visible = 'on';
 % xticks([0:100:1000]);
 % lab = split(num2str([0:100:500,100:100:500]))
 % xticklabels(lab);
-
-%%
+set(gca,'FontSize',fontSizeVal) % Creates an axes and sets its FontSize 
+end
 
 
 %% 2. Thresholding & Clustering
-
-% % Build Image mask
-% % This next block of code is an example of what we would use
-% % to estimate the read noise if we did not know it.
-% % However, that is not needed here since we know the read
-% % noise.
-% I_m = nan(size(IM_BNoise_Objs));
-% nmult = 6;
-% [ixb, iyb] =find( IM_BNoise_Objs <= (nmult * sig_readnoise)  );
-% I_m(ixb,iyb) = IM_BNoise_Objs(ixb,iyb);
-% Bhat = median(I_m,"all","omitnan"); % This is the same as lambda
-% Bhat = median(IM_true,"all","omitnan"); % This is the same as lambda
 
 Bhat = sig_readnoise^2;
 
 Ib = IM_true - Bhat;
 figure("Name","Background subtracted Image I - sigma_readnoise");
 imshow(mat2gray(Ib));
-% IB_hat = IM_BNoise_Objs - Bhat;
-% IB_hat =  IB_hat + min(IB_hat,[],'all');
-% idxBhatLtZ = find(IB_hat<0);
-% IB_hat(idxBhatLtZ) = zeros(size(idxBhatLtZ));
 IB_hat = Ib;
 figure("Name","Background Subtracted Image"); imshow(mat2gray(IB_hat))
 h = gca;
@@ -180,123 +157,6 @@ imshowpair(mat2gray(RGB),mat2gray(IB_hat),'montage')
 h = gca;
 h.Visible = 'on';
 
-
-%--------------
-% Thresholding here
-%--------------
-% stdPxlS = floor(std(IB_hat,[],"all"));
-stdPxlS = floor(sqrt(var(IB_hat(:))));
-avgPxlS = mean(IB_hat,"all");
-medPxlS = median(IB_hat,"all");
-% Alternately, we can try doing the std avg and med of some
-% dark window.
-% % medPxlS = median(IB_hat(1:mxiTW_pxl,1:mxjTW_pxl),"all");
-% % IBm = im2bw(IB_hat,1-4.89*stdPxlS);
-% % idxIBm = im2bw(IB_hat,avgPxlS+4.59*stdPxlS);
-
-% idxIBm = im2bw(mat2gray(IB_hat),1);
-% idxIBm = im2bw(IB_hat,avgPxlS);
-% idxIBm = find(IB_hat>=(stdPxlS));
-% idxIBm = find(IB_hat>=(avgPxlS));
-% idxIBm = find(IB_hat>=(medPxlS));
-% idxIBm = find(IB_hat>0);
-% idxIBm = find(IB_hat>= 4*sig_readnoise)'
-nStdDevT = 2; % Levesque, Sec. 2 says multiplier = 2
-idxIBm = find( IB_hat >= nStdDevT*stdPxlS ); % E in Levesque
-% idxIBm = find(IB_hat>= medPxlS); % 
-DetMat = zeros(size(IB_hat));
-SIMat  = ones(size(IB_hat));
-DetMat(idxIBm) = ones(size(DetMat(idxIBm)));
-SIMat(idxIBm) = zeros(size(DetMat(idxIBm)));
-% IB_hat(idxIBm) = ones(size(IB_hat(idxIBm)));
-% IB_hat(~idxIBm) = zeros(size(IB_hat(~idxIBm)));
-IB_hat = DetMat .* IB_hat;
-figure("Name","Image Threshold Image"); 
-% imshow(mat2gray(DetMat))
-imshow(mat2gray(SIMat))
-h = gca;
-h.Visible = 'on';
-
-% sig_n = floor(std(double(IB_hat),0,"all"));
-% idxThresh = IB_hat >= (sig_n/3);
-% IB_hat(idxThresh) = uint8(0); 
-
-% Plots
-figure("Name","True Image next to Threshold Image")
-imshowpair(mat2gray(RGB),mat2gray(IB_hat),'montage')
-h = gca;
-h.Visible = 'on';
-xticks(0:100:1000);
-lab = split(num2str([0:100:500,100:100:500]));
-xticklabels(lab);
-title('Truth Image vs Threshold')
-% figure("Name","Truth Image diff with Threshold")
-% imshowpair(mat2gray(RGB),IB_hat,'diff')
-% h = gca;
-% h.Visible = 'on';
-% title('Truth Image diff Threshold')
-% figure("Name","Truth Image diff with Threshold")
-% imshowpair(mat2gray(RGB),IB_hat,'falsecolor')
-% h = gca;
-% h.Visible = 'on';
-% title('Truth Image falsecolor nlfilter()')
-
-% end % from iterating on nSigMult for the mTW tracking window
-
-%--------------
-% Clustering
-%--------------
-% IB_hat_flat = IB_hat(:);%IB_hat(:);
-
-[xdetc_pxl,ydetc_pxl] = find(DetMat); %<--- Works
-% [xdetc_pxl,ydetc_pxl] = find(IB_hat); %<--- Works
-% [xdetc_pxl,ydetc_pxl] = find(idxIBm); %<--- Doesnt work
-
-
-det_coord_pxl = [xdetc_pxl,ydetc_pxl];
-disp('Detection coordinates (first few):')
-disp(det_coord_pxl(1:5,:))
-
-% [IdxClust, C] = dbscan(det_coord_pxl,6*sigPsfPixel_pxl,80);
-[IdxClust, C] = dbscan(det_coord_pxl,3*sigPsfPixel_pxl,50);
-CentroidsHat = calc_centroids_from_clusters(ydetc_pxl,xdetc_pxl,IdxClust,DetMat);
-
-idxTrueMatchClust = [ 3 4 5 1 2 ];
-fprintf('Object %d & n/a & n/a & %7.3f & %7.3f & n/a \n',...
-      idxTrueMatchClust(4),osi_pxl(idxTrueMatchClust(4),:))
-fprintf('Object %d & n/a & n/a & %7.3f & %7.3f & n/a \n',...
-      idxTrueMatchClust(5),osi_pxl(idxTrueMatchClust(5),:))
-for icent = 1 : numel(CentroidsHat(:,1))
-   idxT = idxTrueMatchClust(icent);
-   thisAbsErrMag = sqrt(sum((osi_pxl(idxT,:) - CentroidsHat(icent,:)).^2));
-   fprintf('Object %d & %7.3f & %7.3f & %7.3f & %7.3f & %7.3f \n',...
-      idxT,CentroidsHat(icent,:),osi_pxl(idxT,:),thisAbsErrMag)
-%    fprintf('Object %d & %7.3f & %7.3f \\\\ \n',icent,CentroidsHat(icent,:));
-end
-%% Clustering Results Figure
-figure("Name","Clustering Results")
-% scatter(xdetc_pxl,ydetc_pxl,'.k','DisplayName','All Detections');
-hold on;
-detfig = gscatter(ydetc_pxl,xdetc_pxl,IdxClust);
-detfig(1).Color='k';
-% detfig(2).Color=[0 1 0];
-% detfig(3).Color=[0;139;69]./norm([0;139;69]);%[178;58;238]./norm([178;58;238]);
-% detfig(4).Color=[154;205;50]./norm([154;205;50]);%
-% detfig(5).Color=[102;205;0]./norm([102;205;0]);%
-
-detfig_ax = gca;
-detfig_ax.YDir ="reverse";
-legend('Outlier','1st obj','2nd obj','3rd obj','4th obj',Location='northeast')
-xlabel(''); ylabel('')
-
-hold on;
-
-plot(CentroidsHat(:,2),CentroidsHat(:,1),'+g','MarkerSize',12,'LineWidth',2,'DisplayName','Est. Centroid');
-plot(osi_pxl(:,2),osi_pxl(:,1),'+m','MarkerSize',12,'LineWidth',2,'DisplayName','True Centroid');
-axis equal
-xlim([0 500])
-ylim([0 500])
-grid minor;
 
 %% Match Filter
 
@@ -335,7 +195,7 @@ MFscore = conv2(Ib, g, 'same');
 sigmaMF = sqrt(var(MFscore(:)));
 % 
 % % MF Threshold
-nSigMFMult = 1/2;
+nSigMFMult = 4;
 T_MF = sigmaMF * nSigMFMult;
 % 
 % % MF Detections
@@ -345,6 +205,7 @@ DetMFMat(idxDetMF) = ones(size(IB_hat(idxDetMF)));
 
 figure("Name","Match Filter Detections Image")
 imshow(mat2gray(DetMFMat))
+set(gca,'FontSize',fontSizeVal) % Creates an axes and sets its FontSize to 18
 
 
 
@@ -365,7 +226,7 @@ CentroidsMFHat = calc_centroids_from_clusters(yMFdetc_pxl,xMFdetc_pxl,IdxClustMF
 figure("Name","MF Clustering Results")
 hold on;
 detfig = gscatter(yMFdetc_pxl,xMFdetc_pxl,IdxClustMF);
-detfig(1).Color='k';
+% detfig(1).Color='k';
 % % detfig(2).Color=[0 1 0];
 % % detfig(3).Color=[0;139;69]./norm([0;139;69]);%[178;58;238]./norm([178;58;238]);
 % % detfig(4).Color=[154;205;50]./norm([154;205;50]);%
@@ -373,8 +234,9 @@ detfig(1).Color='k';
 % 
 detfig_ax = gca;
 detfig_ax.YDir ="reverse";
-legend('Outlier','1st obj','2nd obj','3rd obj','4th obj','5th obj',Location='northeast')
+legend('Object Detection Group',Location='northeast')
 xlabel(''); ylabel('')
+detfig_ax.FontSize = 14;
 
 hold on;
 
@@ -384,3 +246,98 @@ axis equal
 xlim([0 500])
 ylim([0 500])
 grid minor;
+
+
+%% BINARY HYPOTHIS WITH MATCH FILTER
+minPntsMat = [[3 3 3]
+                [3 10 100]];
+nsigmultiterArray=[6 10];
+iMinPntsArray = 1;
+for iObj = 1:nObjs
+   nSigMultIter = nsigmultiterArray(iObj);
+   minPntsArray = minPntsMat(iObj,:);
+   thisIb = squeeze(ImSeq(iObj).IDATA(:,:,end)-Bhat);
+for p_FA = [1e-4 0.01 0.10]
+
+% F0 = cdf('Normal',x,mu,sigPsfPixel_pxl)
+% f0 = pdf('Normal',x,mu,sigma)
+gamma = icdf('Normal',1-p_FA,0,sigmaMF);
+
+% gamma is now our MF threshold that helps us determine 
+% if a given pixel is a detection or not because if our 
+% MF score at a pixel is higher than gamma, we can reject H0, right?
+% Yes that gives us gamma, or in the MF application that gives us T_MF
+% And then you threshold as before, creating a logical matrix based on MF_score >T_MF
+
+% Convolution function
+g = exp(-((centMTWrng/2).^2+(centMTWrng'/2).^2)./(2*sigPsfPixel_pxl^2)); 
+
+% MF Score
+% convTic = tic;
+MFscore = conv2(thisIb, g, 'same');
+% convToc = toc(convTic);
+% fprintf('Elapsed time for convolution (s): %f\n',convToc)
+ 
+% % MF Variance
+sigmaMF = sqrt(var(MFscore(:)));
+% 
+% % MF Threshold
+nSigMFMult = 1;
+% T_MF = sigmaMF * nSigMFMult;
+T_MF = nSigMFMult *gamma;
+% 
+% % MF Detections
+idxDetMF= MFscore >= T_MF;
+DetMFMat = zeros(size(thisIb));
+DetMFMat(idxDetMF) = ones(size(thisIb(idxDetMF)));
+
+figure("Name","Match Filter Detections Image")
+imshow(mat2gray(DetMFMat))
+set(gca,'FontSize',fontSizeVal) % Creates an axes and sets its FontSize to 18
+
+
+
+[xMFdetc_pxl,yMFdetc_pxl] = find(DetMFMat); %<--- Works
+
+
+detMF_coord_pxl = [xMFdetc_pxl,yMFdetc_pxl];
+disp('Detection coordinates (first few):')
+disp(detMF_coord_pxl (1:5,:))
+%%
+try
+ticDbscan = tic;
+[IdxClustMF, C] = dbscan(detMF_coord_pxl ,nSigMultIter*sigPsfPixel_pxl,minPntsArray(iMinPntsArray));
+tocDbscan = toc(ticDbscan);
+fprintf('Elapsed time for dbscan (s): %f\n',tocDbscan);
+CentroidsMFHat = calc_centroids_from_clusters(yMFdetc_pxl,xMFdetc_pxl,IdxClustMF,DetMFMat);
+
+%% MF+BINARY TESTING Clustering Results Figure
+figure("Name",['MF+BINARY Clustering Results p_FA = ',num2str(p_FA,'%0.2e')])
+hold on;
+detfig = gscatter(yMFdetc_pxl,xMFdetc_pxl,IdxClustMF);
+% detfig(1).Color='k';
+% % detfig(2).Color=[0 1 0];
+% % detfig(3).Color=[0;139;69]./norm([0;139;69]);%[178;58;238]./norm([178;58;238]);
+% % detfig(4).Color=[154;205;50]./norm([154;205;50]);%
+% % detfig(5).Color=[102;205;0]./norm([102;205;0]);%
+% 
+detfig_ax = gca;
+detfig_ax.YDir ="reverse";
+legend('Object Detection Group',Location='northeast')
+xlabel(''); ylabel('')
+detfig_ax.FontSize = 14;
+
+hold on;
+
+plot(CentroidsMFHat(:,2),CentroidsMFHat(:,1),'+g','MarkerSize',12,'LineWidth',2,'DisplayName','Est. Centroid');
+plot(osi_pxl(:,2),osi_pxl(:,1),'+m','MarkerSize',12,'LineWidth',2,'DisplayName','True Centroid');
+axis equal
+xlim([0 500])
+ylim([0 500])
+grid minor;
+catch
+   fprintf('dbscan did not work for p_FA = %0.3e\n',p_FA);
+end
+   iMinPntsArray = iMinPntsArray + 1;
+end
+end
